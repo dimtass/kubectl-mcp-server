@@ -10,10 +10,14 @@ import logging
 import os
 import json
 from typing import Dict, Any, List, Optional, Union
+from .utils.ssh_wrapper import get_ssh_wrapper
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("natural-language")
+
+# Initialize SSH wrapper at module level
+_ssh_wrapper = get_ssh_wrapper()
 
 def process_query(query: str) -> Dict[str, Any]:
     """
@@ -163,36 +167,41 @@ def extract_pod_name(query: str) -> Optional[str]:
 def execute_command(command: str) -> str:
     """
     Execute a kubectl command and return the output.
-    
+
     Args:
         command: The kubectl command to execute
-        
+
     Returns:
         The command output
     """
     try:
         # For enhanced safety, handle the case where kubeconfig doesn't exist
-        kubeconfig = os.environ.get('KUBECONFIG', os.path.expanduser('~/.kube/config'))
-        if not os.path.exists(kubeconfig):
-            logger.warning(f"Kubeconfig not found at {kubeconfig}")
-            return f"Warning: Kubernetes config not found at {kubeconfig}. Please configure kubectl."
-        
+        # (only relevant when not using SSH)
+        if not _ssh_wrapper.is_enabled:
+            kubeconfig = os.environ.get('KUBECONFIG', os.path.expanduser('~/.kube/config'))
+            if not os.path.exists(kubeconfig):
+                logger.warning(f"Kubeconfig not found at {kubeconfig}")
+                return f"Warning: Kubernetes config not found at {kubeconfig}. Please configure kubectl."
+
+        # Wrap command with SSH if configured
+        wrapped_command = _ssh_wrapper.wrap_shell_command(command)
+
         # Try to run the command with a timeout for safety
         result = subprocess.run(
-            command,
+            wrapped_command,
             shell=True,
             check=False,  # Don't raise exception on non-zero exit
             capture_output=True,
             text=True,
             timeout=10  # Timeout after 10 seconds
         )
-        
+
         # Check for errors
         if result.returncode != 0:
             error_msg = result.stderr.strip() if result.stderr else "Unknown error"
             logger.warning(f"Command failed with exit code {result.returncode}: {error_msg}")
             return f"Command failed: {error_msg}\n\nCommand: {command}"
-        
+
         return result.stdout if result.stdout else "Command completed successfully with no output"
     except subprocess.TimeoutExpired:
         logger.error(f"Command timed out: {command}")

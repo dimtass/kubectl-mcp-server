@@ -25,7 +25,7 @@ except ImportError:
     import subprocess
     try:
         subprocess.check_call([
-            sys.executable, "-m", "pip", "install", 
+            sys.executable, "-m", "pip", "install",
             "mcp>=1.5.0"
         ])
         from mcp.server.fastmcp import FastMCP
@@ -34,6 +34,7 @@ except ImportError:
         raise
 
 from .natural_language import process_query
+from .utils.ssh_wrapper import get_ssh_wrapper
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -47,6 +48,8 @@ class MCPServer:
         self.name = name
         # Create a new server instance using the FastMCP API
         self.server = FastMCP(name=name)
+        # Initialize SSH wrapper for remote command execution
+        self.ssh_wrapper = get_ssh_wrapper()
         # Check for required dependencies
         self.dependencies_available = self._check_dependencies()
         if not self.dependencies_available:
@@ -214,10 +217,10 @@ class MCPServer:
             """Install a Helm chart."""
             if not self._check_helm_availability():
                 return {"success": False, "error": "Helm is not available on this system"}
-            
+
             try:
                 import subprocess, tempfile, yaml, os
-                
+
                 # Handle repo addition as a separate step if provided
                 if repo:
                     try:
@@ -225,16 +228,18 @@ class MCPServer:
                         repo_parts = repo.split('=')
                         if len(repo_parts) != 2:
                             return {"success": False, "error": "Repository format should be 'repo_name=repo_url'"}
-                        
+
                         repo_name, repo_url = repo_parts
                         repo_add_cmd = ["helm", "repo", "add", repo_name, repo_url]
-                        logger.debug(f"Running command: {' '.join(repo_add_cmd)}")
-                        subprocess.check_output(repo_add_cmd, stderr=subprocess.PIPE, text=True)
-                        
+                        wrapped_cmd = self.ssh_wrapper.wrap_command(repo_add_cmd)
+                        logger.debug(f"Running command: {' '.join(wrapped_cmd)}")
+                        subprocess.check_output(wrapped_cmd, stderr=subprocess.PIPE, text=True)
+
                         # Update repositories
                         repo_update_cmd = ["helm", "repo", "update"]
-                        logger.debug(f"Running command: {' '.join(repo_update_cmd)}")
-                        subprocess.check_output(repo_update_cmd, stderr=subprocess.PIPE, text=True)
+                        wrapped_cmd = self.ssh_wrapper.wrap_command(repo_update_cmd)
+                        logger.debug(f"Running command: {' '.join(wrapped_cmd)}")
+                        subprocess.check_output(wrapped_cmd, stderr=subprocess.PIPE, text=True)
                         
                         # Use the chart with repo prefix if needed
                         if '/' not in chart:
@@ -249,12 +254,14 @@ class MCPServer:
                 # Create namespace if it doesn't exist
                 try:
                     ns_cmd = ["kubectl", "get", "namespace", namespace]
-                    subprocess.check_output(ns_cmd, stderr=subprocess.PIPE, text=True)
+                    wrapped_cmd = self.ssh_wrapper.wrap_command(ns_cmd)
+                    subprocess.check_output(wrapped_cmd, stderr=subprocess.PIPE, text=True)
                 except subprocess.CalledProcessError:
                     logger.info(f"Namespace {namespace} not found, creating it")
                     create_ns_cmd = ["kubectl", "create", "namespace", namespace]
+                    wrapped_cmd = self.ssh_wrapper.wrap_command(create_ns_cmd)
                     try:
-                        subprocess.check_output(create_ns_cmd, stderr=subprocess.PIPE, text=True)
+                        subprocess.check_output(wrapped_cmd, stderr=subprocess.PIPE, text=True)
                     except subprocess.CalledProcessError as e:
                         logger.error(f"Error creating namespace: {e.stderr if hasattr(e, 'stderr') else str(e)}")
                         return {"success": False, "error": f"Failed to create namespace: {e.stderr if hasattr(e, 'stderr') else str(e)}"}
@@ -267,10 +274,11 @@ class MCPServer:
                             yaml.dump(values, f)
                             values_file = f.name
                         cmd += ["-f", values_file]
-                    
+
                     # Execute the install command
-                    logger.debug(f"Running command: {' '.join(cmd)}")
-                    result = subprocess.check_output(cmd, stderr=subprocess.PIPE, text=True)
+                    wrapped_cmd = self.ssh_wrapper.wrap_command(cmd)
+                    logger.debug(f"Running command: {' '.join(wrapped_cmd)}")
+                    result = subprocess.check_output(wrapped_cmd, stderr=subprocess.PIPE, text=True)
                     
                     return {
                         "success": True, 
@@ -294,10 +302,10 @@ class MCPServer:
             """Upgrade a Helm release."""
             if not self._check_helm_availability():
                 return {"success": False, "error": "Helm is not available on this system"}
-            
+
             try:
                 import subprocess, tempfile, yaml, os
-                
+
                 # Handle repo addition as a separate step if provided
                 if repo:
                     try:
@@ -305,16 +313,18 @@ class MCPServer:
                         repo_parts = repo.split('=')
                         if len(repo_parts) != 2:
                             return {"success": False, "error": "Repository format should be 'repo_name=repo_url'"}
-                        
+
                         repo_name, repo_url = repo_parts
                         repo_add_cmd = ["helm", "repo", "add", repo_name, repo_url]
-                        logger.debug(f"Running command: {' '.join(repo_add_cmd)}")
-                        subprocess.check_output(repo_add_cmd, stderr=subprocess.PIPE, text=True)
-                        
+                        wrapped_cmd = self.ssh_wrapper.wrap_command(repo_add_cmd)
+                        logger.debug(f"Running command: {' '.join(wrapped_cmd)}")
+                        subprocess.check_output(wrapped_cmd, stderr=subprocess.PIPE, text=True)
+
                         # Update repositories
                         repo_update_cmd = ["helm", "repo", "update"]
-                        logger.debug(f"Running command: {' '.join(repo_update_cmd)}")
-                        subprocess.check_output(repo_update_cmd, stderr=subprocess.PIPE, text=True)
+                        wrapped_cmd = self.ssh_wrapper.wrap_command(repo_update_cmd)
+                        logger.debug(f"Running command: {' '.join(wrapped_cmd)}")
+                        subprocess.check_output(wrapped_cmd, stderr=subprocess.PIPE, text=True)
                         
                         # Use the chart with repo prefix if needed
                         if '/' not in chart:
@@ -334,10 +344,12 @@ class MCPServer:
                             yaml.dump(values, f)
                             values_file = f.name
                         cmd += ["-f", values_file]
-                    
+
+
                     # Execute the upgrade command
-                    logger.debug(f"Running command: {' '.join(cmd)}")
-                    result = subprocess.check_output(cmd, stderr=subprocess.PIPE, text=True)
+                    wrapped_cmd = self.ssh_wrapper.wrap_command(cmd)
+                    logger.debug(f"Running command: {' '.join(wrapped_cmd)}")
+                    result = subprocess.check_output(wrapped_cmd, stderr=subprocess.PIPE, text=True)
                     
                     return {
                         "success": True, 
@@ -365,10 +377,11 @@ class MCPServer:
             try:
                 import subprocess
                 cmd = ["helm", "uninstall", name, "-n", namespace]
-                logger.debug(f"Running command: {' '.join(cmd)}")
-                
+                wrapped_cmd = self.ssh_wrapper.wrap_command(cmd)
+                logger.debug(f"Running command: {' '.join(wrapped_cmd)}")
+
                 try:
-                    result = subprocess.check_output(cmd, stderr=subprocess.PIPE, text=True)
+                    result = subprocess.check_output(wrapped_cmd, stderr=subprocess.PIPE, text=True)
                     return {
                         "success": True, 
                         "message": f"Helm release {name} uninstalled from {namespace}",
@@ -466,7 +479,8 @@ class MCPServer:
                 # If the cluster doesn't support JSON output format for top command,
                 # fall back to parsing text output
                 try:
-                    pod_output = subprocess.check_output(pod_cmd, stderr=subprocess.PIPE, text=True)
+                    wrapped_cmd = self.ssh_wrapper.wrap_command(pod_cmd)
+                    pod_output = subprocess.check_output(wrapped_cmd, stderr=subprocess.PIPE, text=True)
                     pod_data = json.loads(pod_output)
                 except (subprocess.CalledProcessError, json.JSONDecodeError):
                     # Fall back to text output and manual parsing
@@ -475,19 +489,22 @@ class MCPServer:
                         pod_cmd += ["-n", namespace]
                     else:
                         pod_cmd += ["--all-namespaces"]
-                    
-                    pod_output = subprocess.check_output(pod_cmd, stderr=subprocess.PIPE, text=True)
+
+                    wrapped_cmd = self.ssh_wrapper.wrap_command(pod_cmd)
+                    pod_output = subprocess.check_output(wrapped_cmd, stderr=subprocess.PIPE, text=True)
                     pod_data = {"text_output": pod_output}
-                
+
                 # Get node resource usage
                 try:
                     node_cmd = ["kubectl", "top", "nodes", "--no-headers", "-o", "json"]
-                    node_output = subprocess.check_output(node_cmd, stderr=subprocess.PIPE, text=True)
+                    wrapped_cmd = self.ssh_wrapper.wrap_command(node_cmd)
+                    node_output = subprocess.check_output(wrapped_cmd, stderr=subprocess.PIPE, text=True)
                     node_data = json.loads(node_output)
                 except (subprocess.CalledProcessError, json.JSONDecodeError):
                     # Fall back to text output
                     node_cmd = ["kubectl", "top", "nodes"]
-                    node_output = subprocess.check_output(node_cmd, stderr=subprocess.PIPE, text=True)
+                    wrapped_cmd = self.ssh_wrapper.wrap_command(node_cmd)
+                    node_output = subprocess.check_output(wrapped_cmd, stderr=subprocess.PIPE, text=True)
                     node_data = {"text_output": node_output}
                 
                 return {
@@ -509,7 +526,8 @@ class MCPServer:
             try:
                 import subprocess
                 cmd = ["kubectl", "config", "use-context", context_name]
-                subprocess.check_output(cmd)
+                wrapped_cmd = self.ssh_wrapper.wrap_command(cmd)
+                subprocess.check_output(wrapped_cmd)
                 return {"success": True, "message": f"Switched context to {context_name}"}
             except Exception as e:
                 logger.error(f"Error switching context: {e}")
@@ -521,7 +539,8 @@ class MCPServer:
             try:
                 import subprocess
                 cmd = ["kubectl", "config", "current-context"]
-                output = subprocess.check_output(cmd, text=True).strip()
+                wrapped_cmd = self.ssh_wrapper.wrap_command(cmd)
+                output = subprocess.check_output(wrapped_cmd, text=True).strip()
                 return {"success": True, "context": output}
             except Exception as e:
                 logger.error(f"Error getting current context: {e}")
@@ -533,7 +552,8 @@ class MCPServer:
             try:
                 import subprocess
                 cmd = ["kubectl", "explain", resource]
-                output = subprocess.check_output(cmd, text=True)
+                wrapped_cmd = self.ssh_wrapper.wrap_command(cmd)
+                output = subprocess.check_output(wrapped_cmd, text=True)
                 return {"success": True, "explanation": output}
             except Exception as e:
                 logger.error(f"Error explaining resource: {e}")
@@ -545,7 +565,8 @@ class MCPServer:
             try:
                 import subprocess
                 cmd = ["kubectl", "api-resources"]
-                output = subprocess.check_output(cmd, text=True)
+                wrapped_cmd = self.ssh_wrapper.wrap_command(cmd)
+                output = subprocess.check_output(wrapped_cmd, text=True)
                 return {"success": True, "resources": output}
             except Exception as e:
                 logger.error(f"Error getting api-resources: {e}")
@@ -731,20 +752,23 @@ class MCPServer:
             """Forward local port to pod port."""
             try:
                 import subprocess
-                
+
                 cmd = [
                     "kubectl", "port-forward",
                     f"pod/{pod_name}",
                     f"{local_port}:{pod_port}",
                     "-n", namespace
                 ]
-                
+
+                # Wrap command with SSH if configured
+                wrapped_cmd = self.ssh_wrapper.wrap_command(cmd)
+
                 process = subprocess.Popen(
-                    cmd,
+                    wrapped_cmd,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE
                 )
-                
+
                 return {
                     "success": True,
                     "message": f"Port forwarding started: localhost:{local_port} -> {pod_name}:{pod_port}",

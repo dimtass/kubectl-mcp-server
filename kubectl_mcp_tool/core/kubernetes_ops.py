@@ -12,12 +12,13 @@ from typing import Dict, Any, List, Optional
 import subprocess
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
+from ..utils.ssh_wrapper import get_ssh_wrapper
 
 logger = logging.getLogger(__name__)
 
 class KubernetesOperations:
     """Core Kubernetes operations."""
-    
+
     def __init__(self):
         """Initialize Kubernetes client."""
         try:
@@ -25,6 +26,8 @@ class KubernetesOperations:
             self.core_v1 = client.CoreV1Api()
             self.apps_v1 = client.AppsV1Api()
             self.networking_v1 = client.NetworkingV1Api()
+            # Initialize SSH wrapper for remote command execution
+            self.ssh_wrapper = get_ssh_wrapper()
         except Exception as e:
             logger.error(f"Failed to initialize Kubernetes client: {e}")
             raise
@@ -32,7 +35,9 @@ class KubernetesOperations:
     def run_command(self, cmd: List[str]) -> str:
         """Run a kubectl command and return the output."""
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            # Wrap command with SSH if configured
+            wrapped_cmd = self.ssh_wrapper.wrap_command(cmd)
+            result = subprocess.run(wrapped_cmd, capture_output=True, text=True, check=True)
             return result.stdout.strip()
         except subprocess.CalledProcessError as e:
             logger.error(f"Command failed: {' '.join(cmd)}")

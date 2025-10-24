@@ -1,5 +1,8 @@
 # Kubectl MCP Server
 
+> This is a fork that uses `kubectl` via ssh access to a cluster node instead of running the `kubectl` command locally.
+> This is useful in case a firewall sentinel allows ssh but not `kubectl`. See how to use it below.
+
 A Model Context Protocol (MCP) server for Kubernetes that enables AI assistants like Claude, Cursor, and others to interact with Kubernetes clusters through natural language.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -91,6 +94,75 @@ A Model Context Protocol (MCP) server for Kubernetes that enables AI assistants 
 - [x] Intelligent resource relationship mapping
 - [x] Error explanation with recovery suggestions
 - [x] Volume management and identification
+- [x] **Remote Execution via SSH** - Execute kubectl/helm commands on remote hosts
+
+## SSH Remote Execution
+
+kubectl-mcp-server supports executing kubectl and helm commands on a remote host via SSH, allowing you to run the MCP server locally while accessing Kubernetes clusters on remote machines.
+
+### Quick Start
+
+Enable SSH mode with environment variables:
+
+```bash
+export KUBECTL_SSH_ENABLED=true
+export KUBECTL_SSH_USER=dimtass
+export KUBECTL_SSH_HOST=192.168.1.130
+export KUBECTL_SSH_KEY=~/.ssh/id_rsa  # Optional but recommended
+```
+
+### Benefits
+
+- 🔐 **Centralized Access**: Manage remote clusters without direct network access
+- 🚀 **No Local Tools**: Avoid installing kubectl/helm locally
+- 🔄 **Bastion Support**: Route commands through jump/bastion hosts
+- 💻 **Flexible Deployment**: Run MCP server anywhere, access clusters remotely
+
+### Configuration with AI Assistants
+
+#### Claude Desktop Example (MacOS)
+Create a venv python environment in the repo:
+
+```sh
+python3 -m venv venv
+./venv/bin/pip install -r requirements.txt
+./venv/bin/python -c "import kubectl_mcp_tool; print('kubectl-mcp-tool is installed successfully')"
+```
+
+Then add the following to your claude desktop config in `/Users/<user>/Library/Application Support/Claude/claude_desktop_config.json`
+```json
+{
+  "mcpServers": {
+    "kubernetes": {
+      "command": "/Users/<user>/git/dimtass/kubectl-mcp-server/venv/bin/python",
+      "args": ["-m", "kubectl_mcp_tool.mcp_server"],
+      "env": {
+        "KUBECTL_SSH_ENABLED": "true",
+        "KUBECTL_SSH_USER": "youruser",
+        "KUBECTL_SSH_HOST": "192.168.x.x",
+        "KUBECTL_SSH_KEY": "/Users/youruser/.ssh/id_rsa"
+      }
+    }
+  }
+}
+```
+
+> Use you own correct variables for all the `KUBECTL_SSH_*` env vars.
+
+> The remote host needs to have your ssh public keys installed.
+
+#### Docker Example
+
+```bash
+docker run -it \
+  -e KUBECTL_SSH_ENABLED=true \
+  -e KUBECTL_SSH_USER=dimtass \
+  -e KUBECTL_SSH_HOST=192.168.1.130 \
+  -v ~/.ssh:/root/.ssh:ro \
+  rohitghumare64/kubectl-mcp-server:latest
+```
+
+For detailed SSH configuration, troubleshooting, and security best practices, see the [SSH Configuration Guide](./docs/SSH_CONFIGURATION.md).
 
 ## Architecture
 

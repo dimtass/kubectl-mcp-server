@@ -7,17 +7,23 @@ import json
 import logging
 from typing import Dict, List, Any, Optional
 import subprocess
+from .utils.ssh_wrapper import get_ssh_wrapper
 
 logger = logging.getLogger(__name__)
 
 class KubernetesDiagnostics:
     """Kubernetes diagnostics and monitoring tools."""
 
-    @staticmethod
-    def run_command(cmd: List[str]) -> str:
+    def __init__(self):
+        """Initialize diagnostics with SSH wrapper."""
+        self.ssh_wrapper = get_ssh_wrapper()
+
+    def run_command(self, cmd: List[str]) -> str:
         """Run a kubectl command and return the output."""
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            # Wrap command with SSH if configured
+            wrapped_cmd = self.ssh_wrapper.wrap_command(cmd)
+            result = subprocess.run(wrapped_cmd, capture_output=True, text=True, check=True)
             return result.stdout.strip()
         except subprocess.CalledProcessError as e:
             logger.error(f"Command failed: {' '.join(cmd)}")
